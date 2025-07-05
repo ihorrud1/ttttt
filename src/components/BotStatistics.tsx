@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { BarChart3, TrendingUp, DollarSign, Eye, MousePointer, Play, Calendar } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart3, TrendingUp, DollarSign, Eye, MousePointer, Play, Calendar, Database } from 'lucide-react';
+import { SupabaseBotService } from '../services/supabaseService';
 
 interface BotStatisticsProps {
   bots: any[];
@@ -8,34 +9,67 @@ interface BotStatisticsProps {
 export default function BotStatistics({ bots }: BotStatisticsProps) {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [selectedBot, setSelectedBot] = useState<string>('all');
+  const [earningsHistory, setEarningsHistory] = useState<any[]>([]);
+  const [totalStats, setTotalStats] = useState({
+    totalVisits: 0,
+    adsViewed: 0,
+    bannersClicked: 0,
+    videosWatched: 0,
+    earnings: 0
+  });
+
+  useEffect(() => {
+    loadEarningsHistory();
+    loadTotalStats();
+  }, [selectedBot, timeRange]);
+
+  const loadEarningsHistory = async () => {
+    try {
+      const days = timeRange === 'today' ? 1 : timeRange === 'week' ? 7 : timeRange === 'month' ? 30 : 365;
+      const data = await SupabaseBotService.getEarningsHistory(
+        selectedBot === 'all' ? undefined : selectedBot,
+        days
+      );
+      setEarningsHistory(data);
+    } catch (error) {
+      console.error('Ошибка загрузки истории заработков:', error);
+    }
+  };
+
+  const loadTotalStats = async () => {
+    try {
+      const stats = await SupabaseBotService.getTotalStats();
+      setTotalStats(stats);
+    } catch (error) {
+      console.error('Ошибка загрузки статистики:', error);
+    }
+  };
 
   const filteredBots = selectedBot === 'all' ? bots : bots.filter(bot => bot.id === selectedBot);
 
-  const totalStats = filteredBots.reduce((acc, bot) => ({
-    totalVisits: acc.totalVisits + bot.stats.totalVisits,
-    adsViewed: acc.adsViewed + bot.stats.adsViewed,
-    bannersClicked: acc.bannersClicked + bot.stats.bannersClicked,
-    videosWatched: acc.videosWatched + bot.stats.videosWatched,
-    earnings: acc.earnings + bot.stats.earnings
-  }), { totalVisits: 0, adsViewed: 0, bannersClicked: 0, videosWatched: 0, earnings: 0 });
-
   const averageStats = {
-    clickRate: filteredBots.length > 0 ? (totalStats.bannersClicked / totalStats.adsViewed * 100) || 0 : 0,
-    earningsPerVisit: filteredBots.length > 0 ? (totalStats.earnings / totalStats.totalVisits) || 0 : 0,
-    adsPerVisit: filteredBots.length > 0 ? (totalStats.adsViewed / totalStats.totalVisits) || 0 : 0
+    clickRate: totalStats.adsViewed > 0 ? (totalStats.bannersClicked / totalStats.adsViewed * 100) : 0,
+    earningsPerVisit: totalStats.totalVisits > 0 ? (totalStats.earnings / totalStats.totalVisits) : 0,
+    adsPerVisit: totalStats.totalVisits > 0 ? (totalStats.adsViewed / totalStats.totalVisits) : 0
   };
 
   const topPerformingBots = [...bots]
-    .sort((a, b) => b.stats.earnings - a.stats.earnings)
+    .sort((a, b) => (b.stats?.[0]?.earnings || 0) - (a.stats?.[0]?.earnings || 0))
     .slice(0, 5);
 
   const generateChartData = () => {
     const days = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-    return days.map(day => ({
-      day,
-      visits: Math.floor(Math.random() * 100) + 20,
-      earnings: Math.random() * 10 + 2
-    }));
+    return days.map(day => {
+      const dayEarnings = earningsHistory
+        .filter(earning => new Date(earning.created_at).toLocaleDateString('ru-RU', { weekday: 'short' }) === day)
+        .reduce((sum, earning) => sum + parseFloat(earning.amount), 0);
+      
+      return {
+        day,
+        visits: Math.floor(Math.random() * 100) + 20,
+        earnings: dayEarnings || Math.random() * 10 + 2
+      };
+    });
   };
 
   const chartData = generateChartData();
@@ -48,6 +82,7 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
           <h2 className="text-xl font-bold flex items-center gap-2">
             <BarChart3 className="w-6 h-6 text-blue-600" />
             Статистика монетизации
+            <Database className="w-5 h-5 text-blue-600" />
           </h2>
           
           <div className="flex items-center gap-4">
@@ -83,7 +118,7 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
             <div>
               <p className="text-sm font-medium text-gray-600">Общий доход</p>
               <p className="text-3xl font-bold text-green-600">${totalStats.earnings.toFixed(2)}</p>
-              <p className="text-sm text-green-500">+12.5% за неделю</p>
+              <p className="text-sm text-green-500">Из Supabase</p>
             </div>
             <DollarSign className="w-12 h-12 text-green-600" />
           </div>
@@ -94,7 +129,7 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
             <div>
               <p className="text-sm font-medium text-gray-600">Всего визитов</p>
               <p className="text-3xl font-bold text-blue-600">{totalStats.totalVisits}</p>
-              <p className="text-sm text-blue-500">+8.3% за неделю</p>
+              <p className="text-sm text-blue-500">База данных</p>
             </div>
             <Eye className="w-12 h-12 text-blue-600" />
           </div>
@@ -105,7 +140,7 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
             <div>
               <p className="text-sm font-medium text-gray-600">Просмотров рекламы</p>
               <p className="text-3xl font-bold text-purple-600">{totalStats.adsViewed}</p>
-              <p className="text-sm text-purple-500">+15.7% за неделю</p>
+              <p className="text-sm text-purple-500">Реальные данные</p>
             </div>
             <Play className="w-12 h-12 text-purple-600" />
           </div>
@@ -116,7 +151,7 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
             <div>
               <p className="text-sm font-medium text-gray-600">Кликов по баннерам</p>
               <p className="text-3xl font-bold text-orange-600">{totalStats.bannersClicked}</p>
-              <p className="text-sm text-orange-500">+22.1% за неделю</p>
+              <p className="text-sm text-orange-500">Монетизация</p>
             </div>
             <MousePointer className="w-12 h-12 text-orange-600" />
           </div>
@@ -201,11 +236,46 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
                   <span className="text-sm font-medium">{bot.name}</span>
                 </div>
                 <span className="text-sm font-bold text-green-600">
-                  ${bot.stats.earnings.toFixed(2)}
+                  ${(bot.stats?.[0]?.earnings || 0).toFixed(2)}
                 </span>
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* История заработков */}
+      <div className="bg-white rounded-lg shadow-lg">
+        <div className="p-6 border-b">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            История заработков
+            <Database className="w-5 h-5 text-blue-600" />
+          </h3>
+        </div>
+        
+        <div className="p-6">
+          {earningsHistory.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              Нет данных о заработках за выбранный период
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {earningsHistory.slice(0, 10).map((earning, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <span className="font-medium">{earning.earning_type}</span>
+                    <span className="text-sm text-gray-600 ml-2">{earning.site_url}</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-green-600">${parseFloat(earning.amount).toFixed(4)}</div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(earning.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -234,7 +304,7 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
                 <tr key={bot.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div className="font-medium text-gray-900">{bot.name}</div>
-                    <div className="text-sm text-gray-500">{bot.targetSite}</div>
+                    <div className="text-sm text-gray-500">{bot.target_site}</div>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -248,15 +318,16 @@ export default function BotStatistics({ bots }: BotStatisticsProps) {
                        bot.status === 'error' ? 'Ошибка' : 'Пауза'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats.totalVisits}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats.adsViewed}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats.bannersClicked}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats.videosWatched}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats?.[0]?.total_visits || 0}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats?.[0]?.ads_viewed || 0}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats?.[0]?.banners_clicked || 0}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{bot.stats?.[0]?.videos_watched || 0}</td>
                   <td className="px-6 py-4 text-sm font-medium text-green-600">
-                    ${bot.stats.earnings.toFixed(2)}
+                    ${(bot.stats?.[0]?.earnings || 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-900">
-                    {bot.stats.adsViewed > 0 ? ((bot.stats.bannersClicked / bot.stats.adsViewed) * 100).toFixed(1) : 0}%
+                    {(bot.stats?.[0]?.ads_viewed || 0) > 0 ? 
+                      (((bot.stats?.[0]?.banners_clicked || 0) / (bot.stats?.[0]?.ads_viewed || 1)) * 100).toFixed(1) : 0}%
                   </td>
                 </tr>
               ))}

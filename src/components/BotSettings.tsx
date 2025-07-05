@@ -1,58 +1,80 @@
 import React, { useState } from 'react';
-import { X, Save, Settings, Shield, Globe, Eye, Zap, Clock, Target } from 'lucide-react';
+import { X, Save, Settings, Shield, Globe, Eye, Zap, Clock, Target, Database } from 'lucide-react';
+import { SupabaseBotService, MonetizationBot } from '../services/supabaseService';
 
 interface BotSettingsProps {
-  bot: any;
-  onSave: (bot: any) => void;
+  bot: MonetizationBot;
+  onSave: (bot: MonetizationBot) => void;
   onClose: () => void;
 }
 
 export default function BotSettings({ bot, onSave, onClose }: BotSettingsProps) {
   const [formData, setFormData] = useState({
     name: bot.name,
-    targetSite: bot.targetSite,
-    visitInterval: bot.settings.visitInterval,
-    adTypes: bot.settings.adTypes,
-    humanBehavior: bot.settings.humanBehavior,
-    antiCaptcha: bot.settings.antiCaptcha,
-    userAgent: bot.settings.userAgent,
-    proxyEnabled: !!bot.settings.proxy,
-    proxyHost: bot.settings.proxy?.host || '',
-    proxyPort: bot.settings.proxy?.port || '',
-    proxyUsername: bot.settings.proxy?.username || '',
-    proxyPassword: bot.settings.proxy?.password || '',
-    dnsServers: bot.settings.dns.join(', '),
-    webrtcMode: bot.settings.webrtc.mode,
-    fingerprintEnabled: !!bot.settings.fingerprint
+    targetSite: bot.target_site,
+    visitIntervalMin: bot.settings?.[0]?.visit_interval_min || 30,
+    visitIntervalMax: bot.settings?.[0]?.visit_interval_max || 120,
+    adTypes: bot.settings?.[0]?.ad_types || ['banner', 'video'],
+    humanBehavior: bot.settings?.[0]?.human_behavior || true,
+    antiCaptcha: bot.settings?.[0]?.anti_captcha || true,
+    userAgent: bot.settings?.[0]?.user_agent || '',
+    proxyEnabled: bot.settings?.[0]?.proxy_enabled || false,
+    proxyHost: bot.settings?.[0]?.proxy_host || '',
+    proxyPort: bot.settings?.[0]?.proxy_port || '',
+    proxyUsername: bot.settings?.[0]?.proxy_username || '',
+    proxyPassword: bot.settings?.[0]?.proxy_password || '',
+    dnsServers: bot.settings?.[0]?.dns_servers?.join(', ') || '8.8.8.8, 1.1.1.1',
+    webrtcMode: bot.settings?.[0]?.webrtc_mode || 'disabled',
+    fingerprintEnabled: bot.settings?.[0]?.fingerprint_enabled || false
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const updatedBot = {
-      ...bot,
-      name: formData.name,
-      targetSite: formData.targetSite,
-      settings: {
-        ...bot.settings,
-        visitInterval: formData.visitInterval,
-        adTypes: formData.adTypes,
-        humanBehavior: formData.humanBehavior,
-        antiCaptcha: formData.antiCaptcha,
-        userAgent: formData.userAgent,
-        proxy: formData.proxyEnabled ? {
-          host: formData.proxyHost,
-          port: parseInt(formData.proxyPort),
-          username: formData.proxyUsername || undefined,
-          password: formData.proxyPassword || undefined
-        } : null,
-        dns: formData.dnsServers.split(',').map(s => s.trim()).filter(s => s),
-        webrtc: { mode: formData.webrtcMode },
-        fingerprint: formData.fingerprintEnabled ? { enabled: true } : null
-      }
-    };
+  const [saving, setSaving] = useState(false);
 
-    onSave(updatedBot);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    try {
+      // Обновляем основную информацию о боте
+      await SupabaseBotService.updateBot(bot.id, {
+        name: formData.name,
+        target_site: formData.targetSite
+      });
+
+      // Обновляем настройки бота
+      await SupabaseBotService.updateBotSettings(bot.id, {
+        visit_interval_min: formData.visitIntervalMin,
+        visit_interval_max: formData.visitIntervalMax,
+        ad_types: formData.adTypes,
+        human_behavior: formData.humanBehavior,
+        anti_captcha: formData.antiCaptcha,
+        user_agent: formData.userAgent,
+        proxy_enabled: formData.proxyEnabled,
+        proxy_host: formData.proxyEnabled ? formData.proxyHost : undefined,
+        proxy_port: formData.proxyEnabled ? parseInt(formData.proxyPort.toString()) : undefined,
+        proxy_username: formData.proxyEnabled ? formData.proxyUsername : undefined,
+        proxy_password: formData.proxyEnabled ? formData.proxyPassword : undefined,
+        dns_servers: formData.dnsServers.split(',').map(s => s.trim()).filter(s => s),
+        webrtc_mode: formData.webrtcMode as any,
+        fingerprint_enabled: formData.fingerprintEnabled
+      });
+
+      // Добавляем лог об обновлении настроек
+      await SupabaseBotService.addBotLog({
+        bot_id: bot.id,
+        bot_name: formData.name,
+        log_type: 'info',
+        message: 'Настройки бота обновлены',
+        metadata: { updated_fields: Object.keys(formData) }
+      });
+
+      onSave(bot);
+    } catch (error) {
+      console.error('Ошибка сохранения настроек:', error);
+      alert('Ошибка сохранения настроек в базе данных');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAdTypeChange = (adType: string, checked: boolean) => {
@@ -77,6 +99,7 @@ export default function BotSettings({ bot, onSave, onClose }: BotSettingsProps) 
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
             <Settings className="w-6 h-6" />
             Настройки бота: {bot.name}
+            <Database className="w-5 h-5 text-blue-600" />
           </h2>
           <button
             onClick={onClose}
@@ -139,11 +162,8 @@ export default function BotSettings({ bot, onSave, onClose }: BotSettingsProps) 
                 </label>
                 <input
                   type="number"
-                  value={formData.visitInterval.min}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    visitInterval: { ...prev.visitInterval, min: parseInt(e.target.value) }
-                  }))}
+                  value={formData.visitIntervalMin}
+                  onChange={(e) => setFormData(prev => ({ ...prev, visitIntervalMin: parseInt(e.target.value) }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   min="10"
                 />
@@ -155,11 +175,8 @@ export default function BotSettings({ bot, onSave, onClose }: BotSettingsProps) 
                 </label>
                 <input
                   type="number"
-                  value={formData.visitInterval.max}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    visitInterval: { ...prev.visitInterval, max: parseInt(e.target.value) }
-                  }))}
+                  value={formData.visitIntervalMax}
+                  onChange={(e) => setFormData(prev => ({ ...prev, visitIntervalMax: parseInt(e.target.value) }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   min="30"
                 />
@@ -237,6 +254,7 @@ export default function BotSettings({ bot, onSave, onClose }: BotSettingsProps) 
                 value={formData.userAgent}
                 onChange={(e) => setFormData(prev => ({ ...prev, userAgent: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                placeholder="Будет выбран автоматически из базы данных"
               />
             </div>
           </div>
@@ -362,10 +380,15 @@ export default function BotSettings({ bot, onSave, onClose }: BotSettingsProps) 
             </button>
             <button
               type="submit"
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
             >
-              <Save className="w-4 h-4" />
-              Сохранить настройки
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {saving ? 'Сохранение...' : 'Сохранить в БД'}
             </button>
           </div>
         </form>

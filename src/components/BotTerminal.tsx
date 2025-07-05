@@ -1,38 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Play, Pause, AlertCircle, CheckCircle, Clock } from 'lucide-react';
-
-interface TerminalLog {
-  id: string;
-  timestamp: Date;
-  botId: string;
-  botName: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  message: string;
-}
+import { Terminal, Play, Pause, AlertCircle, CheckCircle, Clock, Database } from 'lucide-react';
+import { SupabaseBotService, BotLog } from '../services/supabaseService';
 
 interface BotTerminalProps {
   bots: any[];
 }
 
 export default function BotTerminal({ bots }: BotTerminalProps) {
-  const [logs, setLogs] = useState<TerminalLog[]>([]);
+  const [logs, setLogs] = useState<BotLog[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [filter, setFilter] = useState<'all' | 'info' | 'success' | 'warning' | 'error'>('all');
+  const [isLoading, setIsLoading] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Симуляция логов в реальном времени
-    const interval = setInterval(() => {
-      if (bots.length > 0) {
-        const randomBot = bots[Math.floor(Math.random() * bots.length)];
-        if (randomBot.status === 'running') {
-          addLog(generateRandomLog(randomBot));
-        }
-      }
-    }, 2000);
-
+    loadLogs();
+    
+    // Обновляем логи каждые 5 секунд
+    const interval = setInterval(loadLogs, 5000);
     return () => clearInterval(interval);
-  }, [bots]);
+  }, []);
 
   useEffect(() => {
     if (isAutoScroll && terminalRef.current) {
@@ -40,46 +27,27 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
     }
   }, [logs, isAutoScroll]);
 
-  const generateRandomLog = (bot: any): TerminalLog => {
-    const logTypes = [
-      { type: 'info', message: `Переход на сайт ${bot.targetSite}` },
-      { type: 'success', message: 'Успешно просмотрел баннерную рекламу' },
-      { type: 'success', message: 'Кликнул по рекламному баннеру' },
-      { type: 'info', message: 'Запуск видеорекламы' },
-      { type: 'success', message: 'Видеореклама просмотрена до конца' },
-      { type: 'warning', message: 'Обнаружена капча, обходим...' },
-      { type: 'success', message: 'Капча успешно решена' },
-      { type: 'info', message: 'Имитация человеческого поведения' },
-      { type: 'info', message: 'Смена User Agent' },
-      { type: 'warning', message: 'Прокси медленно отвечает' },
-      { type: 'error', message: 'Прокси недоступен, переключение...' },
-      { type: 'success', message: 'Подключен новый прокси' },
-      { type: 'info', message: 'DNS запрос выполнен' },
-      { type: 'warning', message: 'WebRTC утечка обнаружена, блокируем' },
-      { type: 'success', message: 'Заработано $0.05 за просмотр рекламы' }
-    ];
-
-    const randomLog = logTypes[Math.floor(Math.random() * logTypes.length)];
-    
-    return {
-      id: `log_${Date.now()}_${Math.random()}`,
-      timestamp: new Date(),
-      botId: bot.id,
-      botName: bot.name,
-      type: randomLog.type as any,
-      message: randomLog.message
-    };
+  const loadLogs = async () => {
+    try {
+      const data = await SupabaseBotService.getBotLogs();
+      setLogs(data);
+    } catch (error) {
+      console.error('Ошибка загрузки логов:', error);
+    }
   };
 
-  const addLog = (log: TerminalLog) => {
-    setLogs(prev => [...prev.slice(-99), log]); // Храним последние 100 логов
+  const clearLogs = async () => {
+    if (confirm('Очистить все логи из базы данных?')) {
+      try {
+        // В реальном приложении здесь будет метод для очистки логов
+        setLogs([]);
+      } catch (error) {
+        console.error('Ошибка очистки логов:', error);
+      }
+    }
   };
 
-  const clearLogs = () => {
-    setLogs([]);
-  };
-
-  const getLogIcon = (type: TerminalLog['type']) => {
+  const getLogIcon = (type: BotLog['log_type']) => {
     switch (type) {
       case 'success': return <CheckCircle className="w-4 h-4 text-green-500" />;
       case 'warning': return <AlertCircle className="w-4 h-4 text-yellow-500" />;
@@ -88,7 +56,7 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
     }
   };
 
-  const getLogColor = (type: TerminalLog['type']) => {
+  const getLogColor = (type: BotLog['log_type']) => {
     switch (type) {
       case 'success': return 'text-green-700';
       case 'warning': return 'text-yellow-700';
@@ -97,7 +65,7 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
     }
   };
 
-  const filteredLogs = filter === 'all' ? logs : logs.filter(log => log.type === filter);
+  const filteredLogs = filter === 'all' ? logs : logs.filter(log => log.log_type === filter);
 
   return (
     <div className="bg-white rounded-lg shadow-lg">
@@ -107,8 +75,9 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
             <Terminal className="w-6 h-6 text-green-600" />
             <h2 className="text-xl font-bold">Терминал ботов</h2>
             <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">
-              Реальное время
+              Supabase Logs
             </span>
+            <Database className="w-5 h-5 text-blue-600" />
           </div>
           
           <div className="flex items-center gap-3">
@@ -134,6 +103,14 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
             </button>
             
             <button
+              onClick={loadLogs}
+              disabled={isLoading}
+              className="px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm hover:bg-blue-200 disabled:opacity-50"
+            >
+              {isLoading ? 'Загрузка...' : 'Обновить'}
+            </button>
+            
+            <button
               onClick={clearLogs}
               className="px-3 py-1 bg-red-100 text-red-800 rounded text-sm hover:bg-red-200"
             >
@@ -149,25 +126,26 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
       >
         {filteredLogs.length === 0 ? (
           <div className="text-gray-500 text-center py-8">
-            Логи отсутствуют. Запустите ботов для просмотра активности.
+            <Database className="w-8 h-8 mx-auto mb-2" />
+            Логи отсутствуют в базе данных. Запустите ботов для просмотра активности.
           </div>
         ) : (
           <div className="space-y-1">
             {filteredLogs.map((log) => (
               <div key={log.id} className="flex items-start gap-3 py-1">
                 <span className="text-gray-500 text-xs whitespace-nowrap">
-                  {log.timestamp.toLocaleTimeString()}
+                  {new Date(log.created_at).toLocaleTimeString()}
                 </span>
                 
                 <span className="text-blue-400 text-xs min-w-0 truncate">
-                  [{log.botName}]
+                  [{log.bot_name}]
                 </span>
                 
                 <div className="flex items-center gap-1">
-                  {getLogIcon(log.type)}
+                  {getLogIcon(log.log_type)}
                 </div>
                 
-                <span className={`flex-1 ${getLogColor(log.type)}`}>
+                <span className={`flex-1 ${getLogColor(log.log_type)}`}>
                   {log.message}
                 </span>
               </div>
@@ -178,8 +156,13 @@ export default function BotTerminal({ bots }: BotTerminalProps) {
       
       <div className="p-4 border-t bg-gray-50">
         <div className="flex items-center justify-between text-sm text-gray-600">
-          <div>
-            Всего логов: {logs.length} | Отфильтровано: {filteredLogs.length}
+          <div className="flex items-center gap-4">
+            <span>Всего логов в БД: {logs.length}</span>
+            <span>Отфильтровано: {filteredLogs.length}</span>
+            <div className="flex items-center gap-1">
+              <Database className="w-4 h-4 text-blue-600" />
+              <span>Данные из Supabase</span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1">

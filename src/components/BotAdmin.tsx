@@ -1,37 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Play, Pause, Settings, BarChart3, Terminal, Mic, MicOff, Users, Shield, Globe, Eye, Zap, AlertTriangle } from 'lucide-react';
-import { BotService } from '../services/botService';
+import { Bot, Play, Pause, Settings, BarChart3, Terminal, Mic, MicOff, Users, Shield, Globe, Eye, Zap, AlertTriangle, Database, Wifi, WifiOff } from 'lucide-react';
+import { SupabaseBotService, MonetizationBot } from '../services/supabaseService';
 import { VoiceAssistant } from '../services/voiceAssistant';
 import BotTerminal from './BotTerminal';
 import BotStatistics from './BotStatistics';
 import BotSettings from './BotSettings';
-
-interface MonetizationBot {
-  id: string;
-  name: string;
-  status: 'running' | 'stopped' | 'error' | 'paused';
-  targetSite: string;
-  visitCount: number;
-  lastVisit: Date;
-  settings: {
-    visitInterval: { min: number; max: number };
-    adTypes: string[];
-    humanBehavior: boolean;
-    antiCaptcha: boolean;
-    userAgent: string;
-    proxy: any;
-    dns: string[];
-    webrtc: any;
-    fingerprint: any;
-  };
-  stats: {
-    totalVisits: number;
-    adsViewed: number;
-    bannersClicked: number;
-    videosWatched: number;
-    earnings: number;
-  };
-}
 
 export default function BotAdmin() {
   const [bots, setBots] = useState<MonetizationBot[]>([]);
@@ -39,18 +12,50 @@ export default function BotAdmin() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isCreatingBot, setIsCreatingBot] = useState(false);
   const [selectedBot, setSelectedBot] = useState<MonetizationBot | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [totalStats, setTotalStats] = useState({
+    totalVisits: 0,
+    adsViewed: 0,
+    bannersClicked: 0,
+    videosWatched: 0,
+    earnings: 0
+  });
 
   useEffect(() => {
+    checkConnection();
     loadBots();
+    loadTotalStats();
     initializeVoiceAssistant();
   }, []);
 
+  const checkConnection = async () => {
+    try {
+      const connected = await SupabaseBotService.testConnection();
+      setIsConnected(connected);
+      if (!connected) {
+        console.error('Нет подключения к Supabase');
+      }
+    } catch (error) {
+      console.error('Ошибка подключения к Supabase:', error);
+      setIsConnected(false);
+    }
+  };
+
   const loadBots = async () => {
     try {
-      const savedBots = await BotService.getAllBots();
-      setBots(savedBots);
+      const data = await SupabaseBotService.getAllBots();
+      setBots(data);
     } catch (error) {
       console.error('Ошибка загрузки ботов:', error);
+    }
+  };
+
+  const loadTotalStats = async () => {
+    try {
+      const stats = await SupabaseBotService.getTotalStats();
+      setTotalStats(stats);
+    } catch (error) {
+      console.error('Ошибка загрузки статистики:', error);
     }
   };
 
@@ -68,27 +73,24 @@ export default function BotAdmin() {
   };
 
   const createNewBot = async () => {
+    if (!isConnected) {
+      alert('Нет подключения к базе данных. Проверьте настройки Supabase.');
+      return;
+    }
+
     setIsCreatingBot(true);
     try {
-      const newBot = await BotService.createBot({
+      const newBot = await SupabaseBotService.createBot({
         name: `Бот-${Date.now()}`,
-        targetSite: '',
-        settings: {
-          visitInterval: { min: 30, max: 120 },
-          adTypes: ['banner', 'video', 'popup'],
-          humanBehavior: true,
-          antiCaptcha: true,
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          proxy: null,
-          dns: ['8.8.8.8', '1.1.1.1'],
-          webrtc: { mode: 'disabled' },
-          fingerprint: null
-        }
+        target_site: ''
       });
-      setBots([...bots, newBot]);
-      VoiceAssistant.speak('Новый бот создан и готов к настройке');
+      
+      await loadBots();
+      await loadTotalStats();
+      VoiceAssistant.speak('Новый бот создан и сохранен в базе данных');
     } catch (error) {
       console.error('Ошибка создания бота:', error);
+      alert('Ошибка создания бота. Проверьте подключение к базе данных.');
     } finally {
       setIsCreatingBot(false);
     }
@@ -96,11 +98,21 @@ export default function BotAdmin() {
 
   const startBot = async (botId: string) => {
     try {
-      await BotService.startBot(botId);
-      setBots(bots.map(bot => 
-        bot.id === botId ? { ...bot, status: 'running' } : bot
-      ));
+      await SupabaseBotService.updateBot(botId, { status: 'running' });
+      await loadBots();
       VoiceAssistant.speak('Бот запущен');
+      
+      // Добавляем лог о запуске
+      const bot = bots.find(b => b.id === botId);
+      if (bot) {
+        await SupabaseBotService.addBotLog({
+          bot_id: botId,
+          bot_name: bot.name,
+          log_type: 'info',
+          message: 'Бот запущен',
+          metadata: {}
+        });
+      }
     } catch (error) {
       console.error('Ошибка запуска бота:', error);
     }
@@ -108,22 +120,33 @@ export default function BotAdmin() {
 
   const stopBot = async (botId: string) => {
     try {
-      await BotService.stopBot(botId);
-      setBots(bots.map(bot => 
-        bot.id === botId ? { ...bot, status: 'stopped' } : bot
-      ));
+      await SupabaseBotService.updateBot(botId, { status: 'stopped' });
+      await loadBots();
       VoiceAssistant.speak('Бот остановлен');
+      
+      // Добавляем лог об остановке
+      const bot = bots.find(b => b.id === botId);
+      if (bot) {
+        await SupabaseBotService.addBotLog({
+          bot_id: botId,
+          bot_name: bot.name,
+          log_type: 'info',
+          message: 'Бот остановлен',
+          metadata: {}
+        });
+      }
     } catch (error) {
       console.error('Ошибка остановки бота:', error);
     }
   };
 
   const deleteBot = async (botId: string) => {
-    if (confirm('Удалить бота?')) {
+    if (confirm('Удалить бота? Все данные будут удалены из базы данных.')) {
       try {
-        await BotService.deleteBot(botId);
-        setBots(bots.filter(bot => bot.id !== botId));
-        VoiceAssistant.speak('Бот удален');
+        await SupabaseBotService.deleteBot(botId);
+        await loadBots();
+        await loadTotalStats();
+        VoiceAssistant.speak('Бот удален из базы данных');
       } catch (error) {
         console.error('Ошибка удаления бота:', error);
       }
@@ -150,24 +173,22 @@ export default function BotAdmin() {
     }
   };
 
-  const totalStats = bots.reduce((acc, bot) => ({
-    totalVisits: acc.totalVisits + bot.stats.totalVisits,
-    adsViewed: acc.adsViewed + bot.stats.adsViewed,
-    bannersClicked: acc.bannersClicked + bot.stats.bannersClicked,
-    videosWatched: acc.videosWatched + bot.stats.videosWatched,
-    earnings: acc.earnings + bot.stats.earnings
-  }), { totalVisits: 0, adsViewed: 0, bannersClicked: 0, videosWatched: 0, earnings: 0 });
-
   return (
     <div className="max-w-7xl mx-auto p-6">
-      {/* Заголовок с голосовым помощником */}
+      {/* Заголовок с индикатором подключения */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <Bot className="w-8 h-8 text-purple-600" />
           <h1 className="text-3xl font-bold text-gray-800">ИИ Администратор ботов</h1>
           <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
-            Монетизация рекламы
+            Supabase + Монетизация
           </span>
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+            isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          }`}>
+            {isConnected ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+            {isConnected ? 'Подключено к БД' : 'Нет подключения к БД'}
+          </div>
         </div>
         
         <div className="flex items-center gap-4">
@@ -185,7 +206,7 @@ export default function BotAdmin() {
           
           <button
             onClick={createNewBot}
-            disabled={isCreatingBot}
+            disabled={isCreatingBot || !isConnected}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
           >
             {isCreatingBot ? (
@@ -197,6 +218,20 @@ export default function BotAdmin() {
           </button>
         </div>
       </div>
+
+      {/* Предупреждение о подключении */}
+      {!isConnected && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <h3 className="font-semibold text-red-800">Нет подключения к Supabase</h3>
+          </div>
+          <p className="text-red-700 mt-2">
+            Для работы с ботами необходимо подключение к базе данных Supabase. 
+            Нажмите кнопку "Connect to Supabase" в правом верхнем углу для настройки подключения.
+          </p>
+        </div>
+      )}
 
       {/* Навигация */}
       <div className="flex gap-2 mb-6">
@@ -283,18 +318,25 @@ export default function BotAdmin() {
       {activeTab === 'dashboard' && (
         <div className="bg-white rounded-lg shadow-lg">
           <div className="p-6 border-b">
-            <h2 className="text-xl font-bold">Управление ботами ({bots.length})</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">Управление ботами ({bots.length})</h2>
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-blue-600" />
+                <span className="text-sm text-gray-600">Данные в Supabase</span>
+              </div>
+            </div>
           </div>
           
           <div className="p-6">
             {bots.length === 0 ? (
               <div className="text-center py-12">
                 <Bot className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-600 mb-2">Нет ботов</h3>
+                <h3 className="text-xl font-semibold text-gray-600 mb-2">Нет ботов в базе данных</h3>
                 <p className="text-gray-500 mb-6">Создайте первого бота для начала монетизации</p>
                 <button
                   onClick={createNewBot}
-                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  disabled={!isConnected}
+                  className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
                 >
                   Создать первого бота
                 </button>
@@ -315,9 +357,9 @@ export default function BotAdmin() {
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(bot.status)}`}>
                               {getStatusText(bot.status)}
                             </span>
-                            <span>Сайт: {bot.targetSite || 'Не настроен'}</span>
-                            <span>Визитов: {bot.stats.totalVisits}</span>
-                            <span>Заработано: ${bot.stats.earnings.toFixed(2)}</span>
+                            <span>Сайт: {bot.target_site || 'Не настроен'}</span>
+                            <span>Визитов: {bot.stats?.[0]?.total_visits || 0}</span>
+                            <span>Заработано: ${(bot.stats?.[0]?.earnings || 0).toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
@@ -363,23 +405,23 @@ export default function BotAdmin() {
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <div className="grid grid-cols-4 gap-4 text-sm">
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${bot.settings.proxy ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                          <span className="text-gray-600">Прокси: {bot.settings.proxy ? 'Активен' : 'Отключен'}</span>
+                          <div className={`w-2 h-2 rounded-full ${bot.settings?.[0]?.proxy_enabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <span className="text-gray-600">Прокси: {bot.settings?.[0]?.proxy_enabled ? 'Активен' : 'Отключен'}</span>
                         </div>
                         
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${bot.settings.webrtc.mode !== 'real' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                          <span className="text-gray-600">WebRTC: {bot.settings.webrtc.mode}</span>
+                          <div className={`w-2 h-2 rounded-full ${bot.settings?.[0]?.webrtc_mode !== 'real' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                          <span className="text-gray-600">WebRTC: {bot.settings?.[0]?.webrtc_mode || 'disabled'}</span>
                         </div>
                         
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${bot.settings.humanBehavior ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                          <span className="text-gray-600">Человекоподобность: {bot.settings.humanBehavior ? 'Да' : 'Нет'}</span>
+                          <div className={`w-2 h-2 rounded-full ${bot.settings?.[0]?.human_behavior ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                          <span className="text-gray-600">Человекоподобность: {bot.settings?.[0]?.human_behavior ? 'Да' : 'Нет'}</span>
                         </div>
                         
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${bot.settings.antiCaptcha ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                          <span className="text-gray-600">Анти-капча: {bot.settings.antiCaptcha ? 'Вкл' : 'Выкл'}</span>
+                          <div className={`w-2 h-2 rounded-full ${bot.settings?.[0]?.anti_captcha ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                          <span className="text-gray-600">Анти-капча: {bot.settings?.[0]?.anti_captcha ? 'Вкл' : 'Выкл'}</span>
                         </div>
                       </div>
                     </div>
@@ -396,8 +438,8 @@ export default function BotAdmin() {
       {activeTab === 'settings' && selectedBot && (
         <BotSettings 
           bot={selectedBot} 
-          onSave={(updatedBot) => {
-            setBots(bots.map(b => b.id === updatedBot.id ? updatedBot : b));
+          onSave={async (updatedBot) => {
+            await loadBots();
             setSelectedBot(null);
           }}
           onClose={() => setSelectedBot(null)}
