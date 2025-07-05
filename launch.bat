@@ -8,6 +8,15 @@ echo.
 echo Запуск приложения...
 echo.
 
+REM Переходим в папку проекта
+cd project
+if %errorlevel% neq 0 (
+    echo ОШИБКА: Папка project не найдена!
+    echo Убедитесь, что вы находитесь в правильной папке
+    pause
+    exit /b 1
+)
+
 REM Проверяем наличие Node.js
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
