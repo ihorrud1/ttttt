@@ -15,7 +15,8 @@ import {
   Settings as SettingsIcon,
   Shield,
   Gift,
-  Server
+  Server,
+  Zap
 } from 'lucide-react';
 
 // Импорт компонентов
@@ -27,11 +28,13 @@ import AIAssistantSetup from './components/AIAssistantSetup';
 import ProxyManager from './components/ProxyManager';
 import AccountManager from './components/AccountManager';
 import TokenManager from './components/TokenManager';
+import BotAdmin from './components/BotAdmin';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('bot-admin');
 
   const tabs = [
+    { id: 'bot-admin', label: 'ИИ Администратор', icon: Zap, highlight: true },
     { id: 'dashboard', label: 'База данных', icon: Database },
     { id: 'profiles', label: 'Профили', icon: Users },
     { id: 'accounts', label: 'Аккаунты', icon: Users },
@@ -53,6 +56,8 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'bot-admin':
+        return <BotAdmin />;
       case 'dashboard':
         return <Dashboard />;
       case 'profiles':
@@ -98,11 +103,14 @@ function App() {
               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
                 v2.0
               </span>
+              <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
+                ИИ Администратор
+              </span>
             </div>
             
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
-                Полная система управления данными
+                Система монетизации рекламы с ИИ
               </div>
             </div>
           </div>
@@ -122,12 +130,19 @@ function App() {
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        ? tab.highlight 
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                   >
                     <Icon className="w-4 h-4" />
                     {tab.label}
+                    {tab.highlight && (
+                      <span className="ml-auto px-1.5 py-0.5 bg-purple-600 text-white rounded text-xs">
+                        NEW
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -146,12 +161,13 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between text-sm text-gray-500">
             <div>
-              © 2024 Bot Manager Pro - Профессиональная система управления данными
+              © 2024 Bot Manager Pro - ИИ Администратор для монетизации рекламы
             </div>
             <div className="flex items-center gap-4">
-              <span>🔒 Данные хранятся локально</span>
-              <span>⚡ Быстрый поиск</span>
-              <span>📊 Аналитика</span>
+              <span>🤖 ИИ Управление</span>
+              <span>🎤 Голосовые команды</span>
+              <span>📊 Реальная статистика</span>
+              <span>🔒 Безопасность</span>
             </div>
           </div>
         </div>
