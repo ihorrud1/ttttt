@@ -1,11 +1,11 @@
-// Сервис для работы с ИИ API
+// Реальный сервис для работы с ИИ API без симуляций
 export class AIService {
   private static getKeys() {
     const saved = localStorage.getItem('ai-api-keys');
     return saved ? JSON.parse(saved) : {};
   }
 
-  // Бесплатный ИИ помощник через Hugging Face
+  // Реальный вызов Hugging Face API
   static async callHuggingFace(message: string): Promise<string> {
     try {
       const response = await fetch('https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium', {
@@ -17,133 +17,124 @@ export class AIService {
           inputs: message,
           parameters: {
             max_length: 100,
-            temperature: 0.7
+            temperature: 0.7,
+            return_full_text: false
           }
         })
       });
 
       if (!response.ok) {
-        // Fallback на локальный ИИ
-        return this.callLocalAI(message);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const data = await response.json();
-      return data.generated_text || data[0]?.generated_text || 'Извините, не смог обработать запрос';
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      return data.generated_text || data[0]?.generated_text || 'Не удалось получить ответ от Hugging Face';
     } catch (error) {
-      return this.callLocalAI(message);
+      throw new Error(`Ошибка Hugging Face: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
     }
   }
 
-  // Локальный ИИ помощник (работает без интернета)
+  // Локальный ИИ на основе правил (без симуляций)
   static async callLocalAI(message: string): Promise<string> {
-    // Простой локальный ИИ на основе правил
-    const responses = {
-      'привет': 'Привет! Как дела? Чем могу помочь?',
-      'как дела': 'У меня всё отлично! А у вас как?',
-      'помощь': 'Я могу помочь с настройкой ботов, объяснить функции или ответить на вопросы!',
-      'бот': 'Боты - это автоматизированные программы. В нашей панели вы можете настроить прокси, поведение и многое другое!',
-      'прокси': 'Прокси помогает скрыть ваш IP адрес. Рекомендую использовать SOCKS5 для лучшей безопасности.',
-      'настройка': 'Для настройки бота перейдите в раздел "Управление ботами" и нажмите на шестеренку рядом с ботом.',
-      'реклама': 'В настройках рекламы можно выбрать какие типы рекламы просматривать и с какой частотой кликать.',
-      'webrtc': 'WebRTC может выдать ваш реальный IP. Рекомендую использовать режим "Подделка IP".',
-      'user agent': 'User Agent определяет какой браузер вы используете. Меняйте его для лучшей маскировки.',
-      'dns': 'DNS серверы переводят доменные имена в IP адреса. Используйте 8.8.8.8 или 1.1.1.1 для стабильности.'
-    };
-
     const lowerMessage = message.toLowerCase();
     
-    // Поиск ключевых слов
-    for (const [key, response] of Object.entries(responses)) {
-      if (lowerMessage.includes(key)) {
-        return response;
+    // База знаний для ботов
+    const botKnowledge = {
+      'прокси': 'Прокси-серверы скрывают ваш реальный IP адрес. Рекомендую SOCKS5 для лучшей безопасности и скорости. Настройте ротацию прокси каждые 10-15 минут.',
+      'user agent': 'User Agent идентифицирует ваш браузер. Используйте актуальные UA от Chrome/Firefox. Меняйте каждые 2-3 часа для избежания детекции.',
+      'webrtc': 'WebRTC может раскрыть ваш реальный IP даже через прокси. Обязательно отключите или используйте режим подделки IP.',
+      'dns': 'DNS серверы переводят домены в IP. Используйте быстрые публичные DNS: 8.8.8.8, 1.1.1.1 или 208.67.222.222.',
+      'отпечаток': 'Browser fingerprinting - метод идентификации по параметрам браузера. Подделывайте canvas, WebGL, аудио отпечатки.',
+      'капча': 'Для обхода капчи используйте сервисы 2captcha, AntiCaptcha или RuCaptcha. Настройте автоматическое решение.',
+      'реклама': 'Для монетизации настройте клики по рекламе с вероятностью 10-20%. Просматривайте видеорекламу 15-30 секунд.',
+      'поведение': 'Имитируйте человеческое поведение: случайные движения мыши, скроллинг, паузы 1-5 секунд между действиями.',
+      'настройка': 'Основные настройки: прокси, User Agent, отключение WebRTC, подделка отпечатков, человеческое поведение.',
+      'безопасность': 'Для безопасности: используйте прокси, меняйте отпечатки, ротируйте IP, избегайте паттернов в поведении.'
+    };
+
+    // Поиск релевантного ответа
+    for (const [keyword, answer] of Object.entries(botKnowledge)) {
+      if (lowerMessage.includes(keyword)) {
+        return answer;
       }
     }
 
-    // Если ничего не найдено, генерируем общий ответ
-    const generalResponses = [
-      'Интересный вопрос! Расскажите подробнее, что именно вас интересует?',
-      'Я понимаю вашу задачу. Попробуйте переформулировать вопрос более конкретно.',
-      'Хороший вопрос! В нашей панели управления есть много настроек для решения подобных задач.',
-      'Для более точного ответа уточните, о какой именно функции идет речь?',
-      'Я готов помочь! Опишите вашу задачу более детально.'
+    // Если точного совпадения нет, ищем частичные совпадения
+    const partialMatches = Object.entries(botKnowledge).filter(([keyword]) => 
+      lowerMessage.split(' ').some(word => keyword.includes(word) || word.includes(keyword))
+    );
+
+    if (partialMatches.length > 0) {
+      return partialMatches[0][1];
+    }
+
+    // Общие ответы для неопознанных запросов
+    return 'Уточните ваш вопрос. Я могу помочь с настройкой прокси, User Agent, WebRTC, отпечатков браузера, обходом капчи, монетизацией рекламы и безопасностью ботов.';
+  }
+
+  // Реальный вызов бесплатного GPT API
+  static async callFreeGPT(message: string): Promise<string> {
+    const endpoints = [
+      'https://chatgpt-api.shn.hk/v1/',
+      'https://api.chatanywhere.com.cn/v1/chat/completions',
+      'https://free.netfly.top/api/openai/v1/chat/completions'
     ];
 
-    return generalResponses[Math.floor(Math.random() * generalResponses.length)];
-  }
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              {
+                role: 'system',
+                content: 'Ты эксперт по настройке ботов и веб-автоматизации. Отвечай кратко и технически точно на русском языке.'
+              },
+              {
+                role: 'user',
+                content: message
+              }
+            ],
+            max_tokens: 150,
+            temperature: 0.7
+          })
+        });
 
-  // Бесплатный ИИ через публичные API
-  static async callFreeGPT(message: string): Promise<string> {
-    try {
-      // Используем бесплатный GPT API
-      const response = await fetch('https://chatgpt-api.shn.hk/v1/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'Ты помощник по настройке ботов. Отвечай кратко и по делу на русском языке.'
-            },
-            {
-              role: 'user',
-              content: message
-            }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        return this.callLocalAI(message);
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            return content.trim();
+          }
+        }
+      } catch (error) {
+        console.log(`Endpoint ${endpoint} недоступен, пробуем следующий...`);
+        continue;
       }
-
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || this.callLocalAI(message);
-    } catch (error) {
-      return this.callLocalAI(message);
     }
+
+    throw new Error('Все бесплатные GPT API недоступны');
   }
 
-  // Бесплатный Claude через публичные API
-  static async callFreeClaude(message: string): Promise<string> {
-    try {
-      const response = await fetch('https://claude-3-sonnet-20240229-v1-0.p.rapidapi.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RapidAPI-Host': 'claude-3-sonnet-20240229-v1-0.p.rapidapi.com',
-          'X-RapidAPI-Key': 'demo' // Демо ключ
-        },
-        body: JSON.stringify({
-          model: 'claude-3-sonnet',
-          messages: [{ role: 'user', content: message }],
-          max_tokens: 150
-        })
-      });
-
-      if (!response.ok) {
-        return this.callLocalAI(message);
-      }
-
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || this.callLocalAI(message);
-    } catch (error) {
-      return this.callLocalAI(message);
-    }
-  }
-
-  // Умный ИИ помощник (комбинирует несколько источников)
+  // Умный ИИ - пробует разные источники
   static async callSmartAI(message: string): Promise<string> {
-    // Сначала пробуем бесплатные API
+    // Сначала пробуем бесплатные внешние API
     try {
       const result = await this.callFreeGPT(message);
       if (result && result.length > 20) {
         return result;
       }
     } catch (error) {
-      console.log('FreeGPT недоступен, пробуем другие варианты...');
+      console.log('FreeGPT недоступен:', error);
     }
 
     try {
@@ -152,17 +143,19 @@ export class AIService {
         return result;
       }
     } catch (error) {
-      console.log('HuggingFace недоступен, используем локальный ИИ...');
+      console.log('HuggingFace недоступен:', error);
     }
 
-    // В крайнем случае используем локальный ИИ
+    // В крайнем случае используем локальную базу знаний
     return this.callLocalAI(message);
   }
 
-  // OpenAI ChatGPT (платный)
+  // Реальный OpenAI API
   static async callOpenAI(message: string): Promise<string> {
     const keys = this.getKeys();
-    if (!keys.openai) throw new Error('OpenAI API ключ не найден. Используйте бесплатные варианты!');
+    if (!keys.openai) {
+      throw new Error('OpenAI API ключ не найден. Добавьте ключ в настройках.');
+    }
 
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -173,24 +166,39 @@ export class AIService {
         },
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: message }],
-          max_tokens: 150
+          messages: [
+            {
+              role: 'system',
+              content: 'Ты эксперт по веб-автоматизации и настройке ботов. Отвечай технически точно.'
+            },
+            {
+              role: 'user',
+              content: message
+            }
+          ],
+          max_tokens: 150,
+          temperature: 0.7
         })
       });
 
-      if (!response.ok) throw new Error('Ошибка API OpenAI');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`OpenAI API Error: ${errorData.error?.message || response.statusText}`);
+      }
       
       const data = await response.json();
       return data.choices[0].message.content;
     } catch (error) {
-      throw new Error('Не удалось получить ответ от OpenAI. Попробуйте бесплатные варианты!');
+      throw new Error(`Ошибка OpenAI: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
     }
   }
 
-  // Claude API (платный)
+  // Реальный Claude API
   static async callClaude(message: string): Promise<string> {
     const keys = this.getKeys();
-    if (!keys.claude) throw new Error('Claude API ключ не найден. Используйте бесплатные варианты!');
+    if (!keys.claude) {
+      throw new Error('Claude API ключ не найден. Добавьте ключ в настройках.');
+    }
 
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -203,23 +211,33 @@ export class AIService {
         body: JSON.stringify({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 150,
-          messages: [{ role: 'user', content: message }]
+          messages: [
+            {
+              role: 'user',
+              content: message
+            }
+          ]
         })
       });
 
-      if (!response.ok) throw new Error('Ошибка API Claude');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Claude API Error: ${errorData.error?.message || response.statusText}`);
+      }
       
       const data = await response.json();
       return data.content[0].text;
     } catch (error) {
-      throw new Error('Не удалось получить ответ от Claude. Попробуйте бесплатные варианты!');
+      throw new Error(`Ошибка Claude: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
     }
   }
 
-  // Google AI (платный)
+  // Реальный Google AI API
   static async callGoogleAI(message: string): Promise<string> {
     const keys = this.getKeys();
-    if (!keys.google) throw new Error('Google AI API ключ не найден. Используйте бесплатные варианты!');
+    if (!keys.google) {
+      throw new Error('Google AI API ключ не найден. Добавьте ключ в настройках.');
+    }
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${keys.google}`, {
@@ -228,24 +246,39 @@ export class AIService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: message }] }]
+          contents: [
+            {
+              parts: [
+                {
+                  text: message
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            maxOutputTokens: 150,
+            temperature: 0.7
+          }
         })
       });
 
-      if (!response.ok) throw new Error('Ошибка API Google AI');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Google AI API Error: ${errorData.error?.message || response.statusText}`);
+      }
       
       const data = await response.json();
       return data.candidates[0].content.parts[0].text;
     } catch (error) {
-      throw new Error('Не удалось получить ответ от Google AI. Попробуйте бесплатные варианты!');
+      throw new Error(`Ошибка Google AI: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
     }
   }
 
-  // Yandex GPT (платный)
+  // Реальный Yandex GPT API
   static async callYandexGPT(message: string): Promise<string> {
     const keys = this.getKeys();
     if (!keys.yandex || !keys.yandexFolder) {
-      throw new Error('Yandex API ключ или Folder ID не найден. Используйте бесплатные варианты!');
+      throw new Error('Yandex API ключ или Folder ID не найден. Добавьте ключи в настройках.');
     }
 
     try {
@@ -263,17 +296,23 @@ export class AIService {
             maxTokens: 150
           },
           messages: [
-            { role: 'user', text: message }
+            {
+              role: 'user',
+              text: message
+            }
           ]
         })
       });
 
-      if (!response.ok) throw new Error('Ошибка API Yandex GPT');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Yandex GPT API Error: ${errorData.error?.message || response.statusText}`);
+      }
       
       const data = await response.json();
       return data.result.alternatives[0].message.text;
     } catch (error) {
-      throw new Error('Не удалось получить ответ от Yandex GPT. Попробуйте бесплатные варианты!');
+      throw new Error(`Ошибка Yandex GPT: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
     }
   }
 }

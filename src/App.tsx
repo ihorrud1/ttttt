@@ -16,7 +16,8 @@ import {
   Shield,
   Gift,
   Server,
-  Zap
+  Zap,
+  Activity
 } from 'lucide-react';
 
 // Импорт компонентов
@@ -29,12 +30,14 @@ import ProxyManager from './components/ProxyManager';
 import AccountManager from './components/AccountManager';
 import TokenManager from './components/TokenManager';
 import BotAdmin from './components/BotAdmin';
+import RealBotManager from './components/RealBotManager';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<string>('bot-admin');
+  const [activeTab, setActiveTab] = useState<string>('real-bots');
 
   const tabs = [
-    { id: 'bot-admin', label: 'ИИ Администратор', icon: Zap, highlight: true },
+    { id: 'real-bots', label: 'Реальные боты', icon: Activity, highlight: true },
+    { id: 'bot-admin', label: 'ИИ Администратор', icon: Zap },
     { id: 'dashboard', label: 'База данных', icon: Database },
     { id: 'profiles', label: 'Профили', icon: Users },
     { id: 'accounts', label: 'Аккаунты', icon: Users },
@@ -56,6 +59,8 @@ function App() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'real-bots':
+        return <RealBotManager />;
       case 'bot-admin':
         return <BotAdmin />;
       case 'dashboard':
@@ -103,14 +108,14 @@ function App() {
               <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
                 v2.0
               </span>
-              <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-medium">
-                ИИ Администратор
+              <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-medium">
+                РЕАЛЬНЫЕ БОТЫ
               </span>
             </div>
             
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
-                Система монетизации рекламы с ИИ
+                Система реальной автоматизации
               </div>
             </div>
           </div>
@@ -131,7 +136,7 @@ function App() {
                     className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                       activeTab === tab.id
                         ? tab.highlight 
-                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
                           : 'bg-blue-50 text-blue-700 border border-blue-200'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
@@ -139,8 +144,8 @@ function App() {
                     <Icon className="w-4 h-4" />
                     {tab.label}
                     {tab.highlight && (
-                      <span className="ml-auto px-1.5 py-0.5 bg-purple-600 text-white rounded text-xs">
-                        NEW
+                      <span className="ml-auto px-1.5 py-0.5 bg-red-600 text-white rounded text-xs">
+                        REAL
                       </span>
                     )}
                   </button>
@@ -161,12 +166,12 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between text-sm text-gray-500">
             <div>
-              © 2024 Bot Manager Pro - ИИ Администратор для монетизации рекламы
+              © 2024 Bot Manager Pro - Реальная система автоматизации
             </div>
             <div className="flex items-center gap-4">
-              <span>🤖 ИИ Управление</span>
-              <span>🎤 Голосовые команды</span>
-              <span>📊 Реальная статистика</span>
+              <span>🤖 Реальные боты</span>
+              <span>🌐 Настоящие прокси</span>
+              <span>⚡ Puppeteer</span>
               <span>🔒 Безопасность</span>
             </div>
           </div>
